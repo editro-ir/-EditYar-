@@ -3,6 +3,7 @@ import logging
 from flask import Flask, request
 import requests
 from google import genai
+from google.genai import types
 
 logging.basicConfig(level=logging.INFO)
 
@@ -13,6 +14,9 @@ TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
 client = genai.Client()
 MODEL_NAME = "gemini-3-flash-preview"
+
+# این خط تعیین می‌کنه بات خودش رو چطوری معرفی کنه
+SYSTEM_INSTRUCTION = "تو دستیار شخصی علی مسجدی هستی. هر جا لازم بود خودت رو معرفی کنی، بگو «من دستیار شخصی علی مسجدی هستم»."
 
 
 def send_message(chat_id, text):
@@ -36,7 +40,7 @@ def webhook():
         return "ok"
 
     if user_text == "/start":
-        send_message(chat_id, "سلام! من دستیار هوش مصنوعی تو هستم. هر چی بخوای بپرس 🙂")
+        send_message(chat_id, "سلام! من دستیار شخصی علی مسجدی هستم. هر چی بخوای بپرس 🙂")
         return "ok"
 
     if user_text:
@@ -44,6 +48,9 @@ def webhook():
             response = client.models.generate_content(
                 model=MODEL_NAME,
                 contents=user_text,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                ),
             )
             send_message(chat_id, response.text)
         except Exception as e:
