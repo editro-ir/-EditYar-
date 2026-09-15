@@ -1,26 +1,38 @@
 import os
 import json
+import time
 import logging
 import requests
 from flask import Flask, request
 from google import genai
 from google.genai import types
+from google.genai.errors import ServerError
 
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
-TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
+
+def require_env(name):
+    value = os.environ.get(name)
+    if not value:
+        logging.error(f"❌ متغیر محیطی {name} تنظیم نشده یا خالیه! برو تو Render > Environment و اضافه‌ش کن.")
+        raise SystemExit(1)
+    return value
+
+
+TELEGRAM_TOKEN = require_env("TELEGRAM_TOKEN")
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
-SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
-SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
+SUPABASE_URL = require_env("SUPABASE_URL").rstrip("/")
+SUPABASE_KEY = require_env("SUPABASE_SERVICE_KEY")
 SUPABASE_HEADERS = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
     "Content-Type": "application/json",
 }
 
-client = genai.Client()
+GEMINI_API_KEY = require_env("GEMINI_API_KEY")
+client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-3-flash-preview"
 
 BASE_SYSTEM_INSTRUCTION = """تو دستیار شخصی علی مسجدی هستی. هر جا لازم بود خودت رو معرفی کنی، بگو «من دستیار شخصی علی مسجدی هستم».
@@ -143,11 +155,23 @@ def webhook():
     suggestions = []
     new_facts = []
     try:
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction),
-        )
+        response = None
+        last_error = None
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(
+                    model=MODEL_NAME,
+                    contents=contents,
+                    config=types.GenerateContentConfig(system_instruction=system_instruction),
+                )
+                break
+            except ServerError as e:
+                last_error = e
+                logging.warning(f"مدل موقتاً در دسترس نیست، تلاش دوباره... ({attempt + 1}/3)")
+                time.sleep(3)
+        if response is None:
+            raise last_error
+
         raw = response.text.strip()
         if raw.startswith("```"):
             raw = raw.strip("`")
