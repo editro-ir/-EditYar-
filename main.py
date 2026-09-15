@@ -122,12 +122,16 @@ def get_pending_tasks(chat_id):
 
 def create_task(chat_id, title, date, time_):
     try:
-        requests.post(
+        resp = requests.post(
             f"{SUPABASE_URL}/rest/v1/tasks",
             headers=SUPABASE_HEADERS,
             json={"chat_id": chat_id, "title": title, "task_date": date, "task_time": time_},
             timeout=10,
         )
+        if resp.ok:
+            logging.info(f"✅ کار ثبت شد: {title} ({date} {time_})")
+        else:
+            logging.error(f"❌ Supabase رد کرد (create_task): {resp.status_code} - {resp.text}")
     except Exception:
         logging.exception("خطا در ثبت کار در Supabase")
 
@@ -256,6 +260,7 @@ def webhook():
         suggestions = data.get("suggestions", [])
         new_facts = data.get("new_facts", [])
         task_action = data.get("task_action", {}) or {}
+        logging.info(f"🔍 task_action دریافتی از مدل: {task_action}")
     except Exception as e:
         logging.exception("خطا در ارتباط با Gemini")
         reply_text = f"یه خطا پیش اومد: {e}"
