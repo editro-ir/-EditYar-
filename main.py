@@ -61,12 +61,14 @@ BASE_SYSTEM_INSTRUCTION = """تو دستیار شخصی علی مسجدی هست
 
 def save_message(chat_id, role, content):
     try:
-        requests.post(
+        resp = requests.post(
             f"{SUPABASE_URL}/rest/v1/conversations",
             headers=SUPABASE_HEADERS,
             json={"chat_id": chat_id, "role": role, "content": content},
             timeout=10,
         )
+        if not resp.ok:
+            logging.error(f"❌ Supabase رد کرد (save_message): {resp.status_code} - {resp.text}")
     except Exception:
         logging.exception("خطا در ذخیرهٔ پیام در Supabase")
 
@@ -75,7 +77,10 @@ def get_history(chat_id, limit=30):
     try:
         params = {"chat_id": f"eq.{chat_id}", "order": "created_at.desc", "limit": str(limit)}
         resp = requests.get(f"{SUPABASE_URL}/rest/v1/conversations", headers=SUPABASE_HEADERS, params=params, timeout=10)
-        rows = resp.json() if resp.ok else []
+        if not resp.ok:
+            logging.error(f"❌ Supabase رد کرد (get_history): {resp.status_code} - {resp.text}")
+            return []
+        rows = resp.json()
         rows.reverse()
         return rows
     except Exception:
@@ -214,6 +219,10 @@ def webhook():
     for row in history:
         role = "user" if row.get("role") == "user" else "model"
         contents.append(types.Content(role=role, parts=[types.Part(text=row.get("content", ""))]))
+
+    if not contents:
+        # اگه به هر دلیلی تاریخچه از Supabase نیومد، لااقل همین پیام فعلی رو مستقیم بفرست
+        contents.append(types.Content(role="user", parts=[types.Part(text=user_text)]))
 
     reply_text = ""
     suggestions = []
