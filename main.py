@@ -40,7 +40,7 @@ GEMINI_API_KEY = require_env("GEMINI_API_KEY")
 REMINDER_SECRET = require_env("REMINDER_SECRET")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL_NAME = "gemini-3.6-flash"
+MODEL_NAME = "gemini-2.0-flash"
 
 BASE_SYSTEM_INSTRUCTION = """تو دستیار شخصی علی مسجدی هستی. هر جا لازم بود خودت رو معرفی کنی، بگو «من دستیار شخصی علی مسجدی هستم».
 
