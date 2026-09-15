@@ -33,7 +33,7 @@ SUPABASE_HEADERS = {
 
 GEMINI_API_KEY = require_env("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL_NAME = "gemini-3-flash-preview"
+MODEL_NAME = "gemini-2.5-flash"
 
 BASE_SYSTEM_INSTRUCTION = """تو دستیار شخصی علی مسجدی هستی. هر جا لازم بود خودت رو معرفی کنی، بگو «من دستیار شخصی علی مسجدی هستم».
 
