@@ -47,13 +47,17 @@ BASE_SYSTEM_INSTRUCTION = """تو دستیار شخصی علی مسجدی هست
   "reply": "متن جواب تو به زبان فارسی",
   "suggestions": ["پیشنهاد کوتاه اول", "پیشنهاد کوتاه دوم"],
   "new_facts": ["فکت مهم جدید"],
-  "task_action": {"action": "create یا complete یا delete یا none", "title": "عنوان کار", "date": "YYYY-MM-DD یا null", "time": "HH:MM یا null"}
+  "task_action": {"action": "create یا complete یا delete یا none", "title": "عنوان کار", "date": "YYYY-MM-DD یا null", "time": "HH:MM یا null", "project": "نام پروژهٔ مرتبط یا null"},
+  "note_action": {"action": "create یا none", "content": "متن یادداشت"},
+  "project_action": {"action": "create یا none", "name": "نام پروژه", "description": "توضیح کوتاه یا null"}
 }
 
 راهنمای هر بخش:
 - suggestions: حداکثر ۲ پیشنهاد کوتاه (حداکثر ۶-۷ کلمه) برای جملهٔ بعدی که کاربر ممکنه بخواد بفرسته.
 - new_facts: اگه کاربر یه اطلاعات ماندگار مهم دربارهٔ خودش گفت (اسم، علاقه، عادت، شغل...) که ارزش داره برای همیشه یادت بمونه، به‌صورت جملهٔ کوتاه بنویس. اگه چیز جدیدی نبود، [] بذار. تکراری ننویس.
-- task_action: اگه کاربر خواست کاری/یادآوری/جلسه‌ای رو ثبت کنه → action=create با title و date/time (اگه ساعت یا تاریخ نگفت، همون null بذار). اگه گفت کاری رو انجام داده/تمومش کرده → action=complete با title (باید با یکی از کارهای فعلی لیست‌شده مطابقت داشته باشه). اگه خواست کاری رو حذف کنه → action=delete با title. در غیر این صورت action=none.
+- task_action: اگه کاربر خواست کاری/یادآوری/جلسه‌ای رو ثبت کنه → action=create با title و date/time (اگه ساعت یا تاریخ نگفت، همون null بذار). اگه گفت کاری رو انجام داده/تمومش کرده → action=complete با title (باید با یکی از کارهای فعلی لیست‌شده مطابقت داشته باشه). اگه خواست کاری رو حذف کنه → action=delete با title. اگه کار به یه پروژهٔ موجود مربوطه، اسمش رو تو project بذار وگرنه null. در غیر این صورت action=none.
+- note_action: اگه کاربر خواست یه نکته/یادداشت/ایده رو ثبت کنی (نه یه کار زمان‌دار) → action=create با content. در غیر این صورت action=none.
+- project_action: اگه کاربر خواست یه پروژهٔ جدید بسازه (یه مجموعه کار بزرگ‌تر با اسم مشخص) → action=create با name و description. در غیر این صورت action=none.
 - تاریخ‌ها رو همیشه به فرم میلادی YYYY-MM-DD و ساعت رو به فرم ۲۴ساعته HH:MM بنویس، حتی اگه کاربر «فردا» یا «سه‌شنبه» گفته باشه (بر اساس تاریخ امروز که بهت داده می‌شه محاسبه کن).
 - خروجی تو فقط همون یک شیء JSON باشه، هیچ متن قبل یا بعدش ننویس."""
 
@@ -119,12 +123,15 @@ def get_pending_tasks(chat_id):
         return []
 
 
-def create_task(chat_id, title, date, time_):
+def create_task(chat_id, title, date, time_, project_name=None):
     try:
+        payload = {"chat_id": chat_id, "title": title, "task_date": date, "task_time": time_}
+        if project_name:
+            payload["project_name"] = project_name
         resp = requests.post(
             f"{SUPABASE_URL}/rest/v1/tasks",
             headers=SUPABASE_HEADERS,
-            json={"chat_id": chat_id, "title": title, "task_date": date, "task_time": time_},
+            json=payload,
             timeout=10,
         )
         if resp.ok:
@@ -133,6 +140,54 @@ def create_task(chat_id, title, date, time_):
             logging.error(f"❌ Supabase رد کرد (create_task): {resp.status_code} - {resp.text}")
     except Exception:
         logging.exception("خطا در ثبت کار در Supabase")
+
+
+def create_note(chat_id, content):
+    try:
+        resp = requests.post(
+            f"{SUPABASE_URL}/rest/v1/notes",
+            headers=SUPABASE_HEADERS,
+            json={"chat_id": chat_id, "content": content},
+            timeout=10,
+        )
+        if not resp.ok:
+            logging.error(f"❌ Supabase رد کرد (create_note): {resp.status_code} - {resp.text}")
+    except Exception:
+        logging.exception("خطا در ثبت یادداشت در Supabase")
+
+
+def get_notes(chat_id):
+    try:
+        params = {"chat_id": f"eq.{chat_id}", "order": "created_at.desc", "limit": "50"}
+        resp = requests.get(f"{SUPABASE_URL}/rest/v1/notes", headers=SUPABASE_HEADERS, params=params, timeout=10)
+        return resp.json() if resp.ok else []
+    except Exception:
+        logging.exception("خطا در خوندن یادداشت‌ها از Supabase")
+        return []
+
+
+def create_project(chat_id, name, description):
+    try:
+        resp = requests.post(
+            f"{SUPABASE_URL}/rest/v1/projects",
+            headers=SUPABASE_HEADERS,
+            json={"chat_id": chat_id, "name": name, "description": description},
+            timeout=10,
+        )
+        if not resp.ok:
+            logging.error(f"❌ Supabase رد کرد (create_project): {resp.status_code} - {resp.text}")
+    except Exception:
+        logging.exception("خطا در ثبت پروژه در Supabase")
+
+
+def get_projects(chat_id):
+    try:
+        params = {"chat_id": f"eq.{chat_id}", "order": "created_at.desc"}
+        resp = requests.get(f"{SUPABASE_URL}/rest/v1/projects", headers=SUPABASE_HEADERS, params=params, timeout=10)
+        return resp.json() if resp.ok else []
+    except Exception:
+        logging.exception("خطا در خوندن پروژه‌ها از Supabase")
+        return []
 
 
 def update_task_status(chat_id, title, status):
@@ -228,6 +283,8 @@ def webhook():
     history = get_history(chat_id)
     facts = get_facts(chat_id)
     tasks = get_pending_tasks(chat_id)
+    notes = get_notes(chat_id)
+    projects = get_projects(chat_id)
     now_tehran = datetime.now(TEHRAN_TZ)
 
     system_instruction = BASE_SYSTEM_INSTRUCTION
@@ -239,12 +296,24 @@ def webhook():
 
     if tasks:
         tasks_text = "\n".join(
-            f"- {t.get('title')} (تاریخ: {t.get('task_date') or '-'}، ساعت: {t.get('task_time') or '-'})"
+            f"- {t.get('title')} (تاریخ: {t.get('task_date') or '-'}، ساعت: {t.get('task_time') or '-'}، پروژه: {t.get('project_name') or '-'})"
             for t in tasks
         )
         system_instruction += f"\n\nکارهای فعلی که هنوز انجام نشدن:\n{tasks_text}"
     else:
         system_instruction += "\n\nهیچ کار ثبت‌نشده‌ای فعلاً وجود نداره."
+
+    if projects:
+        projects_text = "\n".join(f"- {p.get('name')}: {p.get('description') or '-'}" for p in projects)
+        system_instruction += f"\n\nپروژه‌های فعلی کاربر:\n{projects_text}"
+    else:
+        system_instruction += "\n\nهیچ پروژه‌ای فعلاً ثبت نشده."
+
+    if notes:
+        notes_text = "\n".join(f"- {n.get('content')}" for n in notes)
+        system_instruction += f"\n\nیادداشت‌های ثبت‌شدهٔ کاربر:\n{notes_text}"
+    else:
+        system_instruction += "\n\nهیچ یادداشتی فعلاً ثبت نشده."
 
     messages_history = []
     for row in history:
@@ -258,6 +327,8 @@ def webhook():
     suggestions = []
     new_facts = []
     task_action = {}
+    note_action = {}
+    project_action = {}
     try:
         raw = call_ai(system_instruction, messages_history).strip()
         if raw.startswith("```"):
@@ -269,7 +340,9 @@ def webhook():
         suggestions = data.get("suggestions", [])
         new_facts = data.get("new_facts", [])
         task_action = data.get("task_action", {}) or {}
-        logging.info(f"🔍 task_action دریافتی از مدل: {task_action}")
+        note_action = data.get("note_action", {}) or {}
+        project_action = data.get("project_action", {}) or {}
+        logging.info(f"🔍 task_action: {task_action} | note_action: {note_action} | project_action: {project_action}")
     except Exception as e:
         logging.exception("خطا در ارتباط با هوش مصنوعی")
         reply_text = f"یه خطا پیش اومد: {e}"
@@ -283,11 +356,17 @@ def webhook():
     action = task_action.get("action")
     title = task_action.get("title")
     if action == "create" and title:
-        create_task(chat_id, title, task_action.get("date"), task_action.get("time"))
+        create_task(chat_id, title, task_action.get("date"), task_action.get("time"), task_action.get("project"))
     elif action == "complete" and title:
         update_task_status(chat_id, title, "done")
     elif action == "delete" and title:
         delete_task(chat_id, title)
+
+    if note_action.get("action") == "create" and note_action.get("content"):
+        create_note(chat_id, note_action["content"])
+
+    if project_action.get("action") == "create" and project_action.get("name"):
+        create_project(chat_id, project_action["name"], project_action.get("description"))
 
     send_message(chat_id, reply_text, suggestions)
     return "ok"
